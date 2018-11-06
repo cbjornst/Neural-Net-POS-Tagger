@@ -36,6 +36,7 @@ class Model(nn.Module):
         self.charEmbeds = nn.Embedding(85, 15)
         self.conv = nn.Conv1d(1, 15, 45)
         self.linear = nn.Linear(60, 45)
+        self.softmax = nn.Softmax(2)
         self.hidden = (Variable(torch.zeros(2, self.batch_size, 30)), Variable(torch.zeros(2, self.batch_size, 30)))
     
     def forward(self, data, innerSize):
@@ -50,22 +51,23 @@ class Model(nn.Module):
         probs, v = self.lstm(embeddings.view(self.batch_size, innerSize, 30), self.hidden)
         self.hidden = v
         result = self.linear(probs)
-        probabilities = []
-        for i in range(len(result)):
-            probabilities += [[]]
-            for j in range(len(result[i])):
-                probabilities[i] += [[]]
-                summation = 0
-                for k in range(len(result[i][j])):
-                    summation += np.exp(result[i][j][k].item())
-                for k in range(len(result[i][j])):
-                    probabilities[i][j] += [(np.exp(result[i][j][k].item())) / summation]
+        result = self.softmax(result)
+        #probabilities = []
+        #for i in range(len(result)):
+        #    probabilities += [[]]
+        #    for j in range(len(result[i])):
+        #        probabilities[i] += [[]]
+        #        summation = 0
+        #        for k in range(len(result[i][j])):
+        #            summation += np.exp(result[i][j][k].item())
+        #        for k in range(len(result[i][j])):
+        #            probabilities[i][j] += [(np.exp(result[i][j][k].item())) / summation]
         modelTags = []
         for i in range(len(data)):
             modelTags += [[[]]]
             for j in range(len(data[i])):
                 #modelTags += [probabilities[i].index(max(probabilities[i]))]
-                modelTags[i][0] += [max(probabilities[i][j])]
+                modelTags[i][0] += [max(result[i][j]).item()]
         return modelTags
     
     def wordEmbedding(self, dictionary, chars, word, wEmbeds, cEmbeds, conv):
@@ -135,10 +137,10 @@ def train_model(train_file, model_file):
                 V += 1
         trainingData += [[t1, t2]]
     tagger = Model(V + 1)
+    #tagger = tagger.cuda()
     tagger.forward2 = forward2
     tagger.dictionary = dictionary
     tagger.chars = chars
-    #lstm = lstm.cuda()
     s = nn.Sigmoid()
     lossFunction = nn.BCELoss()
     optimizer = optim.SGD(tagger.parameters(), lr=learning_rate)
@@ -146,7 +148,7 @@ def train_model(train_file, model_file):
     ln = 0
     trainingData = Dataset(trainingData)
     train_loader = DataLoader(trainingData, batch_size=64, shuffle=True)
-    for epoch in range(10):        
+    for epoch in range(50):        
         optimizer = adjust_learning_rate(optimizer, epoch)
         for sentence, trainTags in train_loader:
             innerSize = len(sentence[0])

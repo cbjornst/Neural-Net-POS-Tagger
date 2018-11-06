@@ -35,17 +35,19 @@ def forward2(self, data):
     probs, v = self.lstm(embeddings.view(len(data), 1, 30), self.hidden)
     self.hidden = v
     result = self.linear(probs)
-    probabilities = []
-    for i in range(len(result)):
-        probabilities += [[]]
-        summation = 0
-        for k in range(len(result[i][0])):
-            summation += np.exp(result[i][0][k].item())
-        for k in range(len(result[i][0])):
-            probabilities[i] += [(np.exp(result[i][0][k].item())) / summation]
+    result = self.softmax(result)
+    result = result.detach().numpy().tolist()
+    #probabilities = []
+    #for i in range(len(result)):
+    #    probabilities += [[]]
+    #    summation = 0
+    #    for k in range(len(result[i][0])):
+    #        summation += np.exp(result[i][0][k].item())
+    #    for k in range(len(result[i][0])):
+    #        probabilities[i] += [(np.exp(result[i][0][k].item())) / summation]
     modelTags = []
     for i in range(len(data)):
-       modelTags += [probabilities[i].index(max(probabilities[i]))]
+       modelTags += [result[i].index(max(result[i]))]
     return modelTags
 
 if __name__ == "__main__":
