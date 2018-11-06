@@ -5,7 +5,6 @@ import math
 import sys
 import torch
 import numpy as np
-import torch.nn as nn
 
 def tag_sentence(test_file, model_file, out_file):
     # write your code here. You can add functions as well.
@@ -27,7 +26,7 @@ def tag_sentence(test_file, model_file, out_file):
 def forward2(self, data):
     embeddings = None
     for word in data:
-        w = wordEmbedding(self.dictionary, self.chars, word, self.wordEmbeds, self.charEmbeds, self.conv)
+        w = self.wordEmbedding(self.dictionary, self.chars, word, self.wordEmbeds, self.charEmbeds, self.conv)
         if embeddings is None:
             embeddings = w
         else:
@@ -48,39 +47,6 @@ def forward2(self, data):
     for i in range(len(data)):
        modelTags += [probabilities[i].index(max(probabilities[i]))]
     return modelTags
-
-def wordEmbedding(dictionary, chars, word, wEmbeds, cEmbeds, conv):
-    if word in dictionary:
-        w1 = torch.LongTensor([dictionary[word]])
-    else:
-        w1 = torch.LongTensor([len(dictionary) - 1])
-    e = wEmbeds(w1)
-    ci = None
-    for i in range(len(word)):
-        cj = None
-        for j in range(3):    
-            if (i + j - 1) > 0 and (i + j - 1) < len(word):
-                c = [chars[word[i + j - 1]]]
-                c = torch.LongTensor(c)
-            else:
-                c = [84]
-                c = torch.LongTensor(c)
-            c = cEmbeds(c)
-            if cj is not None:
-                cj = torch.cat((cj, c), 1)
-            else:
-                cj = c
-        cj = cj.unsqueeze(0)
-        c = conv(cj)
-        if ci is not None:
-            ci = torch.cat((ci, c), 2)
-        else:
-            ci = c
-    maximum = nn.MaxPool1d(len(word))
-    w = maximum(ci)
-    w = w.view([1, 15])
-    w = torch.cat((e, w), 1)
-    return w
 
 if __name__ == "__main__":
     # make no changes here

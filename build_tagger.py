@@ -42,7 +42,7 @@ class Model(nn.Module):
         embeddings = None
         for i in range(len(data)):
             for word in data[i]:
-                w = wordEmbedding(self.dictionary, self.chars, word, self.wordEmbeds, self.charEmbeds, self.conv)
+                w = self.wordEmbedding(self.dictionary, self.chars, word, self.wordEmbeds, self.charEmbeds, self.conv)
                 if embeddings is None:
                     embeddings = w
                 else:
@@ -67,6 +67,39 @@ class Model(nn.Module):
                 #modelTags += [probabilities[i].index(max(probabilities[i]))]
                 modelTags[i][0] += [max(probabilities[i][j])]
         return modelTags
+    
+    def wordEmbedding(self, dictionary, chars, word, wEmbeds, cEmbeds, conv):
+        if word in dictionary:
+            w1 = torch.LongTensor([dictionary[word]])
+        else:
+            w1 = torch.LongTensor([len(dictionary) - 1])
+        e = wEmbeds(w1)
+        ci = None
+        for i in range(len(word)):
+            cj = None
+            for j in range(3):    
+                if (i + j - 1) > 0 and (i + j - 1) < len(word):
+                    c = [chars[word[i + j - 1]]]
+                    c = torch.LongTensor(c)
+                else:
+                    c = [84]
+                    c = torch.LongTensor(c)
+                c = cEmbeds(c)
+                if cj is not None:
+                    cj = torch.cat((cj, c), 1)
+                else:
+                    cj = c
+            cj = cj.unsqueeze(0)
+            c = conv(cj)
+            if ci is not None:
+                ci = torch.cat((ci, c), 2)
+            else:
+                ci = c
+        maximum = nn.MaxPool1d(len(word))
+        w = maximum(ci)
+        w = w.view([1, 15])
+        w = torch.cat((e, w), 1)
+        return w
     
 learning_rate = 0.01
 
@@ -113,7 +146,7 @@ def train_model(train_file, model_file):
     ln = 0
     trainingData = Dataset(trainingData)
     train_loader = DataLoader(trainingData, batch_size=64, shuffle=True)
-    for epoch in range(1):        
+    for epoch in range(10):        
         optimizer = adjust_learning_rate(optimizer, epoch)
         for sentence, trainTags in train_loader:
             innerSize = len(sentence[0])
@@ -143,7 +176,7 @@ def train_model(train_file, model_file):
 def forward2(self, data):
     embeddings = None
     for word in data:
-        w = wordEmbedding(self.dictionary, self.chars, word, self.wordEmbeds, self.charEmbeds, self.conv)
+        w = self.wordEmbedding(self.dictionary, self.chars, word, self.wordEmbeds, self.charEmbeds, self.conv)
         if embeddings is None:
             embeddings = w
         else:
@@ -165,38 +198,6 @@ def forward2(self, data):
        modelTags += [probabilities[i].index(max(probabilities[i]))]
     return modelTags
 
-def wordEmbedding(dictionary, chars, word, wEmbeds, cEmbeds, conv):
-    if word in dictionary:
-        w1 = torch.LongTensor([dictionary[word]])
-    else:
-        w1 = torch.LongTensor([len(dictionary) - 1])
-    e = wEmbeds(w1)
-    ci = None
-    for i in range(len(word)):
-        cj = None
-        for j in range(3):    
-            if (i + j - 1) > 0 and (i + j - 1) < len(word):
-                c = [chars[word[i + j - 1]]]
-                c = torch.LongTensor(c)
-            else:
-                c = [84]
-                c = torch.LongTensor(c)
-            c = cEmbeds(c)
-            if cj is not None:
-                cj = torch.cat((cj, c), 1)
-            else:
-                cj = c
-        cj = cj.unsqueeze(0)
-        c = conv(cj)
-        if ci is not None:
-            ci = torch.cat((ci, c), 2)
-        else:
-            ci = c
-    maximum = nn.MaxPool1d(len(word))
-    w = maximum(ci)
-    w = w.view([1, 15])
-    w = torch.cat((e, w), 1)
-    return w
    
 if __name__ == "__main__":
     # make no changes here
