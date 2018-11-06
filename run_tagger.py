@@ -8,26 +8,19 @@ import torch
 def tag_sentence(test_file, model_file, out_file):
     # write your code here. You can add functions as well.
 		# use torch library to load model_file
+    tags = ["$","#","``","''","-LRB-","-RRB-",",",".",":","CC","CD","DT","EX","FW","IN","JJ","JJR","JJS","LS","MD","NN","NNP","NNPS","NNS","PDT","POS","PRP","PRP$","RB","RBR","RBS","RP","SYM","TO","UH","VB","VBD","VBG","VBN","VBP","VBZ","WDT","WP","WP$","WRB"]
     lstm = torch.load(model_file)
     data = open(test_file)
     data = data.read().splitlines()
     output = open(out_file, "w")
-    for line in data[0]:
+    for line in data:
         out = ""
         line = line.split(" ")
-        result = lstm.forward(line)
-        probabilities = []
-        for i in range(len(result)):
-            probabilities += [[]]
-            summation = 0
-            for j in range(len(result[i][0])):
-                summation += np.exp(result[i][0][j].item())
-            for j in range(len(result[i][0])):
-                probabilities[i] += [(np.exp(result[i][0][j].item())) / summation]
-        tag = []
-        for i in range(len(line)):
-            tag += [tags[probabilities[i].index(max(probabilities[i]))]]
-        print(tag)
+        result = lstm.forward2(lstm, line)
+        for i in range(len(line)): 
+            out += line[i] + "/" + tags[result[i]] + " "
+        output.write(out + "\n")
+        print(out)
     print('Finished...')
 
 if __name__ == "__main__":
