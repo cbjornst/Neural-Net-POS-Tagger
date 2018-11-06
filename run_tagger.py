@@ -11,18 +11,17 @@ def tag_sentence(test_file, model_file, out_file):
     # write your code here. You can add functions as well.
 		# use torch library to load model_file
     tags = ["$","#","``","''","-LRB-","-RRB-",",",".",":","CC","CD","DT","EX","FW","IN","JJ","JJR","JJS","LS","MD","NN","NNP","NNPS","NNS","PDT","POS","PRP","PRP$","RB","RBR","RBS","RP","SYM","TO","UH","VB","VBD","VBG","VBN","VBP","VBZ","WDT","WP","WP$","WRB"]
-    lstm = torch.load(model_file)
+    tagger = torch.load(model_file)
     data = open(test_file)
     data = data.read().splitlines()
     output = open(out_file, "w")
     for line in data:
         out = ""
         line = line.split(" ")
-        result = forward2(lstm, line)
+        result = forward2(tagger, line)
         for i in range(len(line)): 
             out += line[i] + "/" + tags[result[i]] + " "
         output.write(out + "\n")
-        print(out)
     print('Finished...')
 
 def forward2(self, data):
@@ -51,7 +50,10 @@ def forward2(self, data):
     return modelTags
 
 def wordEmbedding(dictionary, chars, word, wEmbeds, cEmbeds, conv):
-    w1 = torch.LongTensor([dictionary[word]])
+    if word in dictionary:
+        w1 = torch.LongTensor([dictionary[word]])
+    else:
+        w1 = torch.LongTensor([len(dictionary) - 1])
     e = wEmbeds(w1)
     ci = None
     for i in range(len(word)):

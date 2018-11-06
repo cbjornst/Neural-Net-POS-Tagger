@@ -36,7 +36,7 @@ class Model(nn.Module):
         self.charEmbeds = nn.Embedding(85, 15)
         self.conv = nn.Conv1d(1, 15, 45)
         self.linear = nn.Linear(60, 45)
-        self.hidden = (torch.zeros(2, self.batch_size, 30), torch.zeros(2, self.batch_size, 30))
+        self.hidden = (Variable(torch.zeros(2, self.batch_size, 30)), Variable(torch.zeros(2, self.batch_size, 30)))
     
     def forward(self, data, innerSize):
         embeddings = None
@@ -101,14 +101,13 @@ def train_model(train_file, model_file):
                 dictionary[word1] = V
                 V += 1
         trainingData += [[t1, t2]]
-    tagger = Model(V)
+    tagger = Model(V + 1)
     tagger.forward2 = forward2
     tagger.dictionary = dictionary
     tagger.chars = chars
     #lstm = lstm.cuda()
     s = nn.Sigmoid()
     lossFunction = nn.BCELoss()
-    print(tagger.parameters)
     optimizer = optim.SGD(tagger.parameters(), lr=learning_rate)
     start = time.clock()
     ln = 0
@@ -130,7 +129,7 @@ def train_model(train_file, model_file):
             if ln % 50 == 0:
                 print(time.clock() - start)
             tagger.zero_grad()
-            tagger.hidden = (torch.zeros(2, innerSize, 30), torch.zeros(2, innerSize, 30))
+            tagger.hidden = (Variable(torch.zeros(2, innerSize, 30)), Variable(torch.zeros(2, innerSize, 30)))
             modelTags = tagger.forward(sentence, innerSize)
             modelTags = torch.FloatTensor(np.asarray(modelTags))
             loss = lossFunction(modelTags, correctTags)
@@ -167,7 +166,10 @@ def forward2(self, data):
     return modelTags
 
 def wordEmbedding(dictionary, chars, word, wEmbeds, cEmbeds, conv):
-    w1 = torch.LongTensor([dictionary[word]])
+    if word in dictionary:
+        w1 = torch.LongTensor([dictionary[word]])
+    else:
+        w1 = torch.LongTensor([len(dictionary) - 1])
     e = wEmbeds(w1)
     ci = None
     for i in range(len(word)):
