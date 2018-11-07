@@ -31,8 +31,8 @@ def forward2(self, data):
             embeddings = w
         else:
             embeddings = torch.cat((embeddings, w))
-    self.hidden = (torch.zeros(2, 1, 30), torch.zeros(2, 1, 30))
-    probs, v = self.lstm(embeddings.view(len(data), 1, 30), self.hidden)
+    self.hidden = (torch.zeros(2, 1, 15), torch.zeros(2, 1, 15))
+    probs, v = self.lstm(embeddings.view(len(data), 1, 15), self.hidden)
     self.hidden = v
     result = self.linear(probs)
     result = self.softmax(result)
@@ -46,8 +46,8 @@ def forward2(self, data):
     #    for k in range(len(result[i][0])):
     #        probabilities[i] += [(np.exp(result[i][0][k].item())) / summation]
     modelTags = []
-    for i in range(len(data)):
-       modelTags += [result[i].index(max(result[i]))]
+    for i in range(len(result)):
+       modelTags += [result[i][0].index(max(result[i][0]))]
     return modelTags
 
 if __name__ == "__main__":
