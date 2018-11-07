@@ -36,19 +36,8 @@ def forward2(self, data):
     self.hidden = v
     result = self.linear(probs)
     result = self.softmax(result)
-    result = result.detach().numpy().tolist()
-    #probabilities = []
-    #for i in range(len(result)):
-    #    probabilities += [[]]
-    #    summation = 0
-    #    for k in range(len(result[i][0])):
-    #        summation += np.exp(result[i][0][k].item())
-    #    for k in range(len(result[i][0])):
-    #        probabilities[i] += [(np.exp(result[i][0][k].item())) / summation]
-    modelTags = []
-    for i in range(len(result)):
-       modelTags += [result[i][0].index(max(result[i][0]))]
-    return modelTags
+    result = torch.argmax(result, dim=2)
+    return result
 
 if __name__ == "__main__":
     # make no changes here

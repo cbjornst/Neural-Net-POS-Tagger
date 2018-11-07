@@ -8,19 +8,30 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import torch.nn.utils.rnn as rnn
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torch.autograd import Variable
 import numpy as np
 
-class Dataset(Dataset):
-    def __init__(self, data):
+class POSData(Dataset):
+    def __init__(self, data, dictionary):
         self.data = data
         self.num = 0
+        self.dictionary = dictionary
+        self.tags = {"$": 0,"#": 1,"``": 2,"''": 3,"-LRB-": 4,"-RRB-": 5,",": 6,".": 7,":": 8,"CC": 9,"CD": 10,"DT": 11,"EX": 12,"FW": 13,"IN": 14,"JJ": 15,"JJR": 16,"JJS": 17,"LS": 18,"MD": 19,"NN": 20,"NNP": 21,"NNPS": 22,"NNS": 23,"PDT": 24,"POS": 25,"PRP": 26,"PRP$": 27,"RB": 28,"RBR": 29,"RBS": 30,"RP": 31,"SYM": 32,"TO": 33,"UH": 34,"VB": 35,"VBD": 36,"VBG": 37,"VBN": 38,"VBP": 39,"VBZ": 40,"WDT": 41,"WP": 42,"WP$": 43,"WRB": 44}
 
     def __getitem__(self, index):
-        txt = self.data[index][0]
-        label = self.data[index][1]
+        txt = torch.LongTensor(np.zeros(64, dtype=np.int64))
+        count = 0
+        for word in self.data[index][0]:
+            if word in self.dictionary:
+                txt[count] = self.dictionary[word]
+                count += 1
+        label = torch.LongTensor(np.zeros(64, dtype=np.int64))
+        for l in self.data[index][1]:
+            label[l] = l
+        #label = torch.LongTensor([self.data[index][1]])
         return txt, label
 
     def __len__(self):
@@ -31,7 +42,7 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.lstm = nn.LSTM(15, 15, bidirectional=True)
         #tagger.lstm = tagger.lstm.cuda()
-        self.batch_size = 1
+        self.batch_size = 64
         self.wordEmbeds = nn.Embedding(V, 15)
         self.charEmbeds = nn.Embedding(85, 15)
         self.conv = nn.Conv1d(1, 15, 45)
@@ -40,40 +51,24 @@ class Model(nn.Module):
         self.hidden = (Variable(torch.zeros(2, self.batch_size, 15)), Variable(torch.zeros(2, self.batch_size, 15)))
     
     def forward(self, data, innerSize):
-        embeddings = None
-        for i in range(len(data)):
-            for word in data[i]:
-                w = self.wordEmbedding(self.dictionary, self.chars, word, self.wordEmbeds, self.charEmbeds, self.conv)
-                if embeddings is None:
-                    embeddings = w
-                else:
-                    embeddings = torch.cat((embeddings, w))
-        embeddings = Variable(embeddings)
-        probs, v = self.lstm(embeddings.view(self.batch_size, innerSize, 15), self.hidden)
+        #embeddings = None
+        #for i in range(len(data)):
+        #for word in data[i]:
+        #w = self.wordEmbeds(data[0])
+        ##w = self.wordEmbedding(self.dictionary, self.chars, word, self.wordEmbeds, self.charEmbeds, self.conv)
+        #if embeddings is None:
+        #    embeddings = w
+        #else:
+        #    embeddings = torch.cat((embeddings, w))
+        #embeddings = Variable(embeddings)
+        #probs, v = self.lstm(embeddings.view(innerSize, self.batch_size, 15), self.hidden)
+        probs, v = self.lstm(data, self.hidden)
         self.hidden = v
-        result = self.linear(probs)
-        result = self.softmax(result)
-        
-        print(torch.argmax(result, dim=2))
-        result = result.detach().numpy().tolist()
-        #probabilities = []
-        #for i in range(len(result)):
-        #    probabilities += [[]]
-        #    for j in range(len(result[i])):
-        #        probabilities[i] += [[]]
-        #        summation = 0
-        #        for k in range(len(result[i][j])):
-        #            summation += np.exp(result[i][j][k].item())
-        #        for k in range(len(result[i][j])):
-        #            probabilities[i][j] += [(np.exp(result[i][j][k].item())) / summation]
-        modelTags = []
-        for i in range(len(data)):
-            modelTags += [[]]
-            for j in range(len(data[i])):
-                #modelTags += [probabilities[i].index(max(probabilities[i]))]
-                modelTags[i] += [result[i][j].index(max(result[i][j]))]
-        print(modelTags)
-        return modelTags
+        unpacked, unpacked_len = torch.nn.utils.rnn.pad_packed_sequence(probs, batch_first=True)
+        result = self.linear(unpacked)
+        #result = self.softmax(result)
+        #result = torch.argmax(result, dim=2)
+        return result
     
     def wordEmbedding(self, dictionary, chars, word, wEmbeds, cEmbeds, conv):
         if word in dictionary:
@@ -122,11 +117,11 @@ def train_model(train_file, model_file):
     data = open(train_file)
     data = data.read().splitlines()
     dictionary = {}
-    correctTags = []
     chars = {'I': 0, 'n': 1, 'a': 2, 'O': 3, 'c': 4, 't': 5, '.': 6, '1': 7, '9': 8, 'r': 9, 'e': 10, 'v': 11, 'i': 12, 'w': 13, 'o': 14, 'f': 15, '`': 16, 'T': 17, 'h': 18, 'M': 19, 's': 20, 'p': 21, "'": 22, 'C': 23, 'g': 24, 'G': 25, 'd': 26, 'm': 27, '(': 28, 'R': 29, 'l': 30, 'z': 31, 'k': 32, 'S': 33, 'W': 34, 'y': 35, ',': 36, 'L': 37, 'u': 38, '&': 39, 'A': 40, ')': 41, 'b': 42, 'K': 43, 'H': 44, 'E': 45, '-': 46, 'x': 47, 'U': 48, '2': 49, '0': 50, '4': 51, 'B': 52, 'F': 53, 'N': 54, 'D': 55, 'q': 56, '5': 57, '8': 58, '7': 59, '%': 60, '{': 61, '}': 62, 'j': 63, '/': 64, '$': 65, '3': 66, 'Y': 67, ':': 68, 'P': 69, 'Q': 70, 'J': 71, 'V': 72, '?': 73, ';': 74, 'Z': 75, '6': 76, '#': 77, 'X': 78, '!': 79, '\\': 80, '*': 81, '=': 82, '@': 83}
-    tags = ["$","#","``","''","-LRB-","-RRB-",",",".",":","CC","CD","DT","EX","FW","IN","JJ","JJR","JJS","LS","MD","NN","NNP","NNPS","NNS","PDT","POS","PRP","PRP$","RB","RBR","RBS","RP","SYM","TO","UH","VB","VBD","VBG","VBN","VBP","VBZ","WDT","WP","WP$","WRB"]
+    tags = {"$": 45,"#": 1,"``": 2,"''": 3,"-LRB-": 4,"-RRB-": 5,",": 6,".": 7,":": 8,"CC": 9,"CD": 10,"DT": 11,"EX": 12,"FW": 13,"IN": 14,"JJ": 15,"JJR": 16,"JJS": 17,"LS": 18,"MD": 19,"NN": 20,"NNP": 21,"NNPS": 22,"NNS": 23,"PDT": 24,"POS": 25,"PRP": 26,"PRP$": 27,"RB": 28,"RBR": 29,"RBS": 30,"RP": 31,"SYM": 32,"TO": 33,"UH": 34,"VB": 35,"VBD": 36,"VBG": 37,"VBN": 38,"VBP": 39,"VBZ": 40,"WDT": 41,"WP": 42,"WP$": 43,"WRB": 44}
     V = 0
     trainingData = []
+    labels = []
     for line in data:
         line = line.split(" ")
         t1 = []
@@ -134,78 +129,63 @@ def train_model(train_file, model_file):
         for word in line:
             word1, word2 = word.rsplit("/", 1)
             word1 = str(word1)
-            t1 += [word1]
-            t2 += [word2]
             word2 = str(word2)
             if word1 not in dictionary:
                 dictionary[word1] = V
                 V += 1
-        trainingData += [[t1, t2]]
+            t1 += [V - 1]
+            t2 += [tags[word2]]
+        trainingData += [torch.LongTensor(t1)]
+        labels += [torch.LongTensor(t2)]
     tagger = Model(V + 1)
     #tagger = tagger.cuda()
-    tagger.forward2 = forward2
     tagger.dictionary = dictionary
     tagger.chars = chars
-    s = nn.Sigmoid()
     lossFunction = nn.CrossEntropyLoss()
     optimizer = optim.SGD(tagger.parameters(), lr=learning_rate)
     start = time.clock()
     ln = 0
-    trainingData = Dataset(trainingData)
-    train_loader = DataLoader(trainingData, batch_size=64, shuffle=True)
-    for epoch in range(2):        
+    batches = []
+    i = 0
+    while i < len(trainingData):
+        if i + 64 > len(trainingData):
+            #print(labels[i:])
+            batches += [(trainingData[i:], labels[i:])]
+        else:
+            batches += [(trainingData[i:i+64], labels[i:i+64])]
+        i += 64
+    #trainingData = POSData(trainingData, dictionary)
+    #train_loader = DataLoader(trainingData, batch_size=64, shuffle=True, num_workers=1)
+    for epoch in range(1):        
         optimizer = adjust_learning_rate(optimizer, epoch)
-        for sentence, trainTags in train_loader:
-            innerSize = len(sentence[0])
-            correctTags = []
-            for i in range(len(trainTags)):
-                t = []
-                for j in range(len(trainTags[i])):
-                    t += [tags.index(trainTags[i][j])]
-                correctTags += [[t]]
-            correctTags = torch.LongTensor(np.asarray(correctTags))
-            correctTags = torch.squeeze(correctTags)
-            tagger.batch_size = len(sentence)
+        for batch in batches:
+            sentence, trainTags = batch
+            ordered = sorted(sentence, key=len, reverse=True)
+            lengths1 = torch.LongTensor([len(seq) for seq in sentence])
+            lengths2 = torch.LongTensor([len(seq) for seq in ordered])
+            for i in range(len(ordered)):
+                ordered[i] = tagger.wordEmbeds(ordered[i])
+            wordBatch = rnn.pad_sequence(ordered, batch_first=True)
+            innerSize = len(wordBatch[0])
+            wordBatch = rnn.pack_padded_sequence(wordBatch, lengths2, batch_first=True)
+            tagger.batch_size = 64
+            #wordBatch = rnn.pack_padded_sequence(wordBatch, lengths, batch_first=True)
             ln += 1
-            if ln % 50 == 0:
-                print(time.clock() - start)
             tagger.zero_grad()
-            tagger.hidden = (Variable(torch.zeros(2, innerSize, 15)), Variable(torch.zeros(2, innerSize, 15)))
-            modelTags = tagger.forward(sentence, innerSize)
-            modelTags = Variable(torch.FloatTensor(np.asarray(modelTags)), requires_grad=True)
-            loss = lossFunction(modelTags, Variable(correctTags))
+            tagger.hidden = (Variable(torch.zeros(2, tagger.batch_size, 15)), Variable(torch.zeros(2, tagger.batch_size, 15)))
+            modelTags = tagger.forward(wordBatch, innerSize)
+            _, original_idx = lengths1.sort(0)
+            unsorted_idx = original_idx.view(-1, 1, 1).expand_as(modelTags)
+            modelTags = modelTags.gather(0, unsorted_idx.long())
+            modelTags = torch.squeeze(modelTags)
+            loss = lossFunction(modelTags, trainTags)
             loss = Variable(loss, requires_grad = True)
             loss.backward()
             optimizer.step()
+        print(epoch)
     torch.save(tagger, 'model-file')
     print(time.clock() - start)
     print('Finished...')
-
-def forward2(self, data):
-    embeddings = None
-    for word in data:
-        w = self.wordEmbedding(self.dictionary, self.chars, word, self.wordEmbeds, self.charEmbeds, self.conv)
-        if embeddings is None:
-            embeddings = w
-        else:
-            embeddings = torch.cat((embeddings, w))
-    self.hidden = (torch.zeros(2, 1, 30), torch.zeros(2, 1, 30))
-    probs, v = self.lstm(embeddings.view(len(data), 1, 30), self.hidden)
-    self.hidden = v
-    result = self.linear(probs)
-    probabilities = []
-    for i in range(len(result)):
-        probabilities += [[]]
-        summation = 0
-        for k in range(len(result[i][0])):
-            summation += np.exp(result[i][0][k].item())
-        for k in range(len(result[i][0])):
-            probabilities[i] += [(np.exp(result[i][0][k].item())) / summation]
-    modelTags = []
-    for i in range(len(data)):
-       modelTags += [probabilities[i].index(max(probabilities[i]))]
-    return modelTags
-
    
 if __name__ == "__main__":
     # make no changes here
