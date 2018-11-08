@@ -166,10 +166,10 @@ def train_model(train_file, model_file):
             for i in range(len(ordered)):
                 ordered[i] = tagger.wordEmbeds(ordered[i])
             wordBatch = rnn.pad_sequence(ordered, batch_first=True)
+            trainTags = rnn.pad_sequence(trainTags, batch_first=True)
             innerSize = len(wordBatch[0])
             wordBatch = rnn.pack_padded_sequence(wordBatch, lengths2, batch_first=True)
             tagger.batch_size = 64
-            #wordBatch = rnn.pack_padded_sequence(wordBatch, lengths, batch_first=True)
             ln += 1
             tagger.zero_grad()
             tagger.hidden = (Variable(torch.zeros(2, tagger.batch_size, 15)), Variable(torch.zeros(2, tagger.batch_size, 15)))
@@ -178,6 +178,12 @@ def train_model(train_file, model_file):
             unsorted_idx = original_idx.view(-1, 1, 1).expand_as(modelTags)
             modelTags = modelTags.gather(0, unsorted_idx.long())
             modelTags = torch.squeeze(modelTags)
+            for i in range(64):
+                for j in range(innerSize):
+                    if j + 1 > lengths1[i].item():
+                        modelTags[i][j] = 0
+            lossFunction.ignore_index = lengths1
+            print(lossFunction.ignore_index)
             loss = lossFunction(modelTags, trainTags)
             loss = Variable(loss, requires_grad = True)
             loss.backward()
