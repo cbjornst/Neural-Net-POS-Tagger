@@ -14,6 +14,7 @@ def tag_sentence(test_file, model_file, out_file):
     data = open(test_file)
     data = data.read().splitlines()
     output = open(out_file, "w")
+    tagger.lstm.batch_first = False
     for line in data:
         out = ""
         line = line.split(" ")
@@ -36,6 +37,7 @@ def forward2(self, data):
     self.hidden = v
     result = self.linear(probs)
     result = self.softmax(result)
+    print(result)
     result = torch.argmax(result, dim=2)
     return result
 
