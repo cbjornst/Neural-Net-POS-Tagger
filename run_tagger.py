@@ -5,6 +5,7 @@ import math
 import sys
 import torch
 import numpy as np
+import torch.nn.functional as F
 
 def tag_sentence(test_file, model_file, out_file):
     # write your code here. You can add functions as well.
@@ -26,18 +27,21 @@ def tag_sentence(test_file, model_file, out_file):
 
 def forward2(self, data):
     embeddings = None
+    t1 = []
     for word in data:
-        w = self.wordEmbedding(self.dictionary, self.chars, word, self.wordEmbeds, self.charEmbeds, self.conv)
-        if embeddings is None:
-            embeddings = w
+        if word in self.dictionary:
+            t1 += [self.dictionary[word]]
         else:
-            embeddings = torch.cat((embeddings, w))
+            t1  += [len(self.dictionary) - 1]
+    embeddings = self.wordEmbeds(torch.LongTensor(t1))
+    #if embeddings is None:
+    #    embeddings = w
+    #else:
+    #    embeddings = torch.cat((embeddings, w))
     self.hidden = (torch.zeros(2, 1, 15), torch.zeros(2, 1, 15))
-    probs, v = self.lstm(embeddings.view(len(data), 1, 15), self.hidden)
-    self.hidden = v
+    probs, self.hidden = self.lstm(embeddings.view(len(data), 1, 15), self.hidden)
     result = self.linear(probs)
-    result = self.softmax(result)
-    print(result)
+    #result = F.softmax(result, dim=2)
     result = torch.argmax(result, dim=2)
     return result
 
