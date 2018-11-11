@@ -11,6 +11,7 @@ import torch.optim as optim
 import torch.nn.utils.rnn as rnn
 from torch.autograd import Variable
 import numpy as np
+import random
     
 class Model(nn.Module):
     def __init__(self, V):
@@ -18,13 +19,13 @@ class Model(nn.Module):
         self.lstm = nn.LSTM(15, 15, bidirectional=True, batch_first=True)
         self.wordEmbeds = nn.Embedding(V, 15)
         self.batch_size = 64
-        #self.charEmbeds = nn.Embedding(85, 15)
-        #self.conv = nn.Conv1d(1, 15, 45)
+        self.charEmbeds = nn.Embedding(85, 15)
+        self.conv = nn.Conv1d(1, 15, 45)
         self.linear = nn.Linear(30, 45)
-        self.hidden = (Variable(torch.torch.randn(2, self.batch_size, 15)), Variable(torch.torch.randn(2, self.batch_size, 15)))
-    
+        self.hidden = self.init_hidden()
+        
     def forward(self, data, innerSize, lengths):
-        data = self.wordEmbeds(data)
+        data = self.wordEmbedding(data)
         data = rnn.pack_padded_sequence(data, lengths, batch_first=True)
         self.hidden = self.init_hidden()
         probs, self.hidden = self.lstm(data, self.hidden)
@@ -32,66 +33,45 @@ class Model(nn.Module):
         unpacked = unpacked.contiguous()
         unpacked = unpacked.view(-1, unpacked.shape[2])
         result = self.linear(unpacked)
-        #result = F.log_softmax(result, dim=1)
         result = result.view(self.batch_size, innerSize, 45)
         return result
     
     def init_hidden(self):
         return (Variable(torch.torch.randn(2, self.batch_size, 15)), Variable(torch.torch.randn(2, self.batch_size, 15))) 
         
-    def wordEmbedding(self, dictionary, chars, words, wEmbeds, cEmbeds, conv):
-        w1 = []
-        for word in words:  
-            if word in dictionary:
-                w1 += [word]
-            else:
-                w1  += [len(dictionary) - 1]
-        e = wEmbeds(torch.LongTensor(w1))
-#        ci = None
-#        for i in range(len(word)):
-#            cj = None
-#            for j in range(3):    
-#                if (i + j - 1) > 0 and (i + j - 1) < len(word):
-#                    c = [chars[word[i + j - 1]]]
-#                    c = torch.LongTensor(c)
-#                else:
-#                    c = [84]
-#                    c = torch.LongTensor(c)
-#                c = cEmbeds(c)
-#                if cj is not None:
-#                    cj = torch.cat((cj, c), 1)
-#                else:
-#                    cj = c
-#            cj = cj.unsqueeze(0)
-#            c = conv(cj)
-#            if ci is not None:
-#                ci = torch.cat((ci, c), 2)
-#            else:
-#                ci = c
-#        maximum = nn.MaxPool1d(len(word))
-#        w = maximum(ci)
-#        w = w.view([1, 15])
-        #w = torch.cat((e, w), 1)
+    def wordEmbedding(self, words):
+        e = self.wordEmbeds(words)
+        ci = None
+        for i in range(len(words)):    
+            for j in range(len(words[i])):
+                if words[i][j] != 0:
+                    word = self.dictionary[words[i][j].item()]
+                    cj = None
+                    for j in range(3):    
+                        if (i + j - 1) > 0 and (i + j - 1) < len(word):
+                            c = [self.chars[word[i + j - 1]]]
+                            c = torch.LongTensor(c)
+                        else:
+                            c = [84]
+                            c = torch.LongTensor(c)
+                        c = self.cEmbeds(c)
+                        if cj is not None:
+                            cj = torch.cat((cj, c), 1)
+                        else:
+                            cj = c
+                    cj = cj.unsqueeze(0)
+                    c = self.conv(cj)
+                    if ci is not None:
+                        ci = torch.cat((ci, c), 2)
+                    else:
+                        ci = c
+            maximum = nn.MaxPool1d(len(word))
+            w = maximum(ci)
+            w = w.view([1, 15])
+            w = torch.cat((e[i], w), 1)
         return e
     
-def lossFunc(words, tags):
-    tags = tags.view(-1)
-    words = words.view(-1, 45)
-
-    # create a mask by filtering out all tokens that ARE NOT the padding token
-    mask = (tags > 0).float()
-    print(mask)
-    # count how many tokens we have
-    nb_tokens = int(torch.sum(mask).item())
-    # pick the values for the label and zero out the rest with the mask
-    words = words[range(words.shape[0]), tags - 1] * mask
-
-    # compute cross entropy loss which ignores all <PAD> tokens
-    ce_loss = -torch.sum(words) / nb_tokens
-
-    return ce_loss
-    
-learning_rate = 0.1
+learning_rate = 1
 
 def adjust_learning_rate(optimizer, epoch):
     lr = learning_rate * (0.1 ** (epoch // 10))
@@ -132,7 +112,6 @@ def train_model(train_file, model_file):
     optimizer = optim.SGD(tagger.parameters(), lr=learning_rate)
     lossFunction = nn.CrossEntropyLoss(ignore_index=45)
     start = time.clock()
-    ln = 0
     batches = []
     i = 0
     while i < len(trainingData):
@@ -142,23 +121,22 @@ def train_model(train_file, model_file):
             batches += [(trainingData[i:i+64], labels[i:i+64])]
         i += 64
     train_loss_ = []
-    for epoch in range(10):        
+    for epoch in range(5):        
         optimizer = adjust_learning_rate(optimizer, epoch)        
         total_loss = 0.0
         total = 0.0
+        random.shuffle(batches)
         for batch in batches:
             sentence, trainTags = batch
             ordered = sorted(sentence, key=len, reverse=True)
             ordered2 = sorted(trainTags, key=len, reverse=True)
-            #lengths1 = torch.LongTensor([len(seq) for seq in sentence])
-            lengths2 = torch.LongTensor([len(seq) for seq in ordered])
+            lengths = torch.LongTensor([len(seq) for seq in ordered])
             wordBatch = rnn.pad_sequence(ordered, batch_first=True)
             trainTags = rnn.pad_sequence(ordered2, batch_first=True)
             innerSize = len(wordBatch[0])
             tagger.batch_size = len(sentence)
-            ln += 1
             tagger.zero_grad()
-            modelTags = tagger.forward(wordBatch, innerSize, lengths2)
+            modelTags = tagger.forward(wordBatch, innerSize, lengths)
             trainTags = trainTags.view(-1)
             modelTags = modelTags.view(-1, 45)
             loss = lossFunction(modelTags, trainTags)
@@ -166,9 +144,9 @@ def train_model(train_file, model_file):
             optimizer.step()
             total += len(trainTags)
             total_loss += loss.item()
-        train_loss_.append(total_loss / total)
-        print(train_loss_)
-    torch.save(tagger, 'model-file')
+        train_loss_.append(total_loss * 1000 / total)
+        print(train_loss_[-1])
+    torch.save(tagger, model_file)
     print(time.clock() - start)
     print('Finished...')
    
