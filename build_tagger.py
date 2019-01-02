@@ -15,6 +15,7 @@ import random
     
 class Model(nn.Module):
     def __init__(self, V):
+        #initialize the model
         super(Model, self).__init__()
         self.lstm = nn.LSTM(15, 15, bidirectional=True, batch_first=True)
         self.wordEmbeds = nn.Embedding(V, 15)
@@ -25,10 +26,12 @@ class Model(nn.Module):
         self.hidden = self.init_hidden()
         
     def forward(self, data, innerSize, lengths):
+        #convert to word embeddings and pack all padded sequences
         data = self.wordEmbedding(data)
         data = rnn.pack_padded_sequence(data, lengths, batch_first=True)
         self.hidden = self.init_hidden()
         probs, self.hidden = self.lstm(data, self.hidden)
+        #unpack in order to view output
         unpacked, unpacked_len = torch.nn.utils.rnn.pad_packed_sequence(probs, batch_first=True)
         unpacked = unpacked.contiguous()
         unpacked = unpacked.view(-1, unpacked.shape[2])
@@ -37,9 +40,13 @@ class Model(nn.Module):
         return result
     
     def init_hidden(self):
+        #re-initialize hidden vector as pytorch does not automatically do so
         return (Variable(torch.torch.randn(2, self.batch_size, 15)), Variable(torch.torch.randn(2, self.batch_size, 15))) 
         
     def wordEmbedding(self, words):
+        #create word embeddings
+        #eventually will also create character embeddings; this is a work in 
+        #progress
         e = self.wordEmbeds(words)
         ci = None
         for i in range(len(words)):    
@@ -80,8 +87,7 @@ def adjust_learning_rate(optimizer, epoch):
     return optimizer
 
 def train_model(train_file, model_file):
-    # write your code here. You can add functions as well.
-		# use torch library to save model parameters, hyperparameters, etc. to model_file
+    # train model from train_file
     data = open(train_file)
     data = data.read().splitlines()
     dictionary = {"<PAD>": 0}
@@ -90,6 +96,7 @@ def train_model(train_file, model_file):
     V = 1
     trainingData = []
     labels = []
+    #create dictionary of words
     for line in data:
         line = line.split(" ")
         t1 = []
@@ -109,6 +116,7 @@ def train_model(train_file, model_file):
     #tagger = tagger.cuda()
     tagger.dictionary = dictionary
     tagger.chars = chars
+    #use cross entropy loss and SGD for the neural net
     optimizer = optim.SGD(tagger.parameters(), lr=learning_rate)
     lossFunction = nn.CrossEntropyLoss(ignore_index=45)
     start = time.clock()
@@ -122,11 +130,14 @@ def train_model(train_file, model_file):
         i += 64
     train_loss_ = []
     for epoch in range(5):        
+        #manually shuffle and pass batches in as the built-in pytorch function
+        #was having problems
         optimizer = adjust_learning_rate(optimizer, epoch)        
         total_loss = 0.0
         total = 0.0
         random.shuffle(batches)
         for batch in batches:
+            #pad each sentence and tag list to ensure they are the same length
             sentence, trainTags = batch
             ordered = sorted(sentence, key=len, reverse=True)
             ordered2 = sorted(trainTags, key=len, reverse=True)
@@ -135,6 +146,7 @@ def train_model(train_file, model_file):
             trainTags = rnn.pad_sequence(ordered2, batch_first=True)
             innerSize = len(wordBatch[0])
             tagger.batch_size = len(sentence)
+            #zero gradients as pytorch does not automatically do this
             tagger.zero_grad()
             modelTags = tagger.forward(wordBatch, innerSize, lengths)
             trainTags = trainTags.view(-1)
@@ -144,6 +156,7 @@ def train_model(train_file, model_file):
             optimizer.step()
             total += len(trainTags)
             total_loss += loss.item()
+        #rudimentary loss calculation, could use improvement
         train_loss_.append(total_loss * 1000 / total)
         print(train_loss_[-1])
     torch.save(tagger, model_file)
